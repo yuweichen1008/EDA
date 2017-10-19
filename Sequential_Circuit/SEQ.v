@@ -1,4 +1,4 @@
-module LOCK(
+module SEQ(
 	input	clk,
 	input	rst_n,
 	input	in_valid,

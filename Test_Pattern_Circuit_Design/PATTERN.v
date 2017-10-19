@@ -1,15 +1,4 @@
-//############################################################################
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//   (C) Copyright Laboratory System Integration and Silicon Implementation
-//   All Right Reserved
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-//
-//   2017 ICLAB Fall Course
-//   Lab03    : Magical Dartboard
 //   Author         : Yu-Wei Chen
-//
-//
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 //
 //   File Name   : PATTERN.v
 //   Module Name : PATTERN
@@ -20,12 +9,12 @@
 
 `ifdef RTL
 	`timescale 1ns/10ps
-	`include "MD.v" 
+	`include "TPCD.v" 
 	`define CYCLE_TIME 3.0  
 `endif
 `ifdef GATE
 	`timescale 1ns/1ps
-	`include "MD_SYN.v"
+	`include "TPCD_SYN.v"
 	`define CYCLE_TIME 3.0
 `endif
 

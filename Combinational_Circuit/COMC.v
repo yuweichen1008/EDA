@@ -1,4 +1,5 @@
-module CC (
+module COMC
+(
         in_n0,
         in_n1,
         in_n2,
