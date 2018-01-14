@@ -68,6 +68,13 @@ reg				ci[2:0], co[2:0];
 reg 	[1:0]	inner_cont;
 reg 	[9:0]  	convolution_buf[8:0];
 reg 	[16:0]   conimg_buf[5:0][5:0][2:0];
+// pooling layer
+reg	[7:0]	pooling_buf[26:0];
+reg	[7:0]	stage_1_buf[5:0];
+reg	[7:0]	stage_2_buf[2:0];
+reg	[7:0]	stage_3_buf[1:0];
+reg	[7:0]	stage_4_buf, pool_cnt;
+
 //---------------------------------------------------------------------
 //   Synopsys DesignWare                      
 //---------------------------------------------------------------------
@@ -378,7 +385,7 @@ always@(posedge clk or negedge rst_n) begin
 		done <= 0;
 	else case(c_state)
 		S_CONV:
-			if(counter ==106)
+			if(counter ==109)
 				done <= 1;
 			else
 				done <= done;
@@ -396,7 +403,7 @@ always@(posedge clk or negedge rst_n) begin
 		S_CONV: begin
 			if(inner_cont == 2)
 				column <= column + 1;
-			else if(column == 6 && row < 6)
+			else if(column == 5 && row < 5)
 				column <= 0;
 			else
 				column <= column;
@@ -413,7 +420,7 @@ always@(posedge clk or negedge rst_n) begin
 		row <= 0;
 	else case(c_state)
 		S_CONV: begin
-			if(column == 6 && row < 6)
+			if(column == 5 && row < 5)
 				row <= row + 1;
 			else
 				row <= row;
@@ -476,14 +483,12 @@ always@(posedge clk or negedge rst_n) begin
 	end else if(c_state == S_CONV) begin
 		if(counter == 3)
 			conimg_buf[row][column][0] <= result_6 >> 10;
-/*		
 		else if(counter ==106)
 			conimg_buf[5][5][0] <= result_6 >> 10;
 		else if(counter ==107)
 			conimg_buf[5][5][1] <= result_6 >> 10;
 		else if(counter ==108)
 			conimg_buf[5][5][2] <= result_6 >> 10;
-*/
 		else case(inner_cont)
 			0:conimg_buf[row][column][0]        <= result_6 >> 10;
 			1:conimg_buf[row-1][column-1][1]  <= result_6 >> 10;
