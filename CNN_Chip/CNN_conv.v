@@ -31,7 +31,7 @@ output reg number_6;
 //---------------------------------------------------------------------
 // PARAMETER DECLARATION
 //---------------------------------------------------------------------
-integer i, j, counter;           
+integer i, j, k, counter;           
 parameter   S_IDLE       = 3'b000;
 parameter   S_INPUT_1 = 3'b001;
 parameter   S_INPUT_2 = 3'b010;
@@ -73,7 +73,7 @@ reg	[7:0]	pooling_buf[26:0];
 reg	[7:0]	stage_1_buf[5:0];
 reg	[7:0]	stage_2_buf[2:0];
 reg	[7:0]	stage_3_buf[1:0];
-reg	[7:0]	stage_4_buf, pool_cnt;
+reg	[3:0]	pool_cnt;
 
 //---------------------------------------------------------------------
 //   Synopsys DesignWare                      
@@ -194,8 +194,8 @@ always@(posedge clk or negedge rst_n) begin
 				1: a_4 <= weight_buf[11];
 				default:a_4 <= a_4;
 			endcase
-			a_5<= {{ 1{co[0]}} ,result_4[16:0]};
-			a_6 <= {{ 1{co[1]}} ,result_5[16:0]};
+			a_5<= {{ 1{co[0]}} ,result_4[15:0]};
+			a_6 <= {{ 1{co[1]}} ,result_5[15:0]};
 		end
 		default: begin
 			a_1 <= a_1;
@@ -254,11 +254,14 @@ always@(*) begin
         end
         S_CONV: begin
             if(done)
-                n_state = S_OUTPUT;
+                n_state = S_AFF_1;
         end
 		S_AFF_1: begin
+			n_state = S_POOL;
+		end
+		S_POOL: begin
 			if(done)
-				n_state = S_AFF_2;
+				n_state = S_OUTPUT;
 		end
 		S_AFF_2: begin
 			if(done)
@@ -378,12 +381,34 @@ always@(posedge clk or negedge rst_n)   begin
     else case(c_state)
 		S_CONV:
 			counter <= counter + 1;
-		S_OUTPUT:
+		S_AFF_1:
 			counter <= 7'b0;
-		S_IDLE:
+		S_POOL:
+			counter <= counter + 1;
+		S_OUTPUT, S_IDLE:
 			counter <= 7'b0;
 		default:
 			counter <= counter;
+	endcase
+end
+
+//---------------   Inner_cont
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n)
+		inner_cont <= 2'b0;
+	else case(c_state)
+		S_CONV: begin
+			case(inner_cont)
+				0: inner_cont <= 1;
+				1: inner_cont <= 2;
+				2: inner_cont <= 0;
+				default: inner_cont <= inner_cont;
+			endcase
+		end
+		S_AFF_1, S_OUTPUT:
+			inner_cont <= 0;
+		default:
+			inner_cont <= inner_cont;
 	endcase
 end
 
@@ -392,13 +417,20 @@ always@(posedge clk or negedge rst_n) begin
 	if(!rst_n)
 		done <= 0;
 	else case(c_state)
-		S_CONV:
-			if(counter ==106)
+		S_CONV: begin
+			if(counter ==108)
 				done <= 1;
 			else
 				done <= done;
-		default:
+		end
+		S_POOL: begin
+			if(counter == 11) done <= 1;
+			else done <= done;
+		end
+		S_AFF_1, S_OUTPUT:
 			done <= 0;
+		default:
+			done <= done;
 	endcase
 end
 
@@ -416,9 +448,19 @@ always@(posedge clk or negedge rst_n) begin
 			else
 				column <= column;
 		end
-		
-		default:
+		S_AFF_1:
+			column <= 1;
+		S_POOL:
+			case(column)
+				1:	column <= 3;
+				3: column <= 5;
+				5: column <= 1;
+				default: column <= column;
+			endcase
+		S_OUTPUT:
 			column <= 0;
+		default:
+			column <= column;
 	endcase
 end
 
@@ -433,28 +475,27 @@ always@(posedge clk or negedge rst_n) begin
 			else
 				row <= row;
 		end
-		default:
+		S_AFF_1:
+			row <= 1;
+		S_POOL:
+			if(column == 5) begin
+				case(row)
+					1:	row <= 3;
+					3: row <= 5;
+					5: row <= 5;
+					default: row <= row;
+				endcase
+			end
+		S_OUTPUT:
 			row <= 0;
+		default:
+			row <= row;
 	endcase
 end
 
 //---------------------------------------------------------------------
 //  Convolutional Layer
 //---------------------------------------------------------------------
-
-// inner_cont
-always@(posedge clk or negedge rst_n) begin
-	if(!rst_n)
-		inner_cont <= 2'b0;
-	else if(c_state == S_CONV) begin
-		case(inner_cont)
-			0: inner_cont <= 1;
-			1: inner_cont <= 2;
-			2: inner_cont <= 0;
-			default: inner_cont <= inner_cont;
-		endcase
-	end 
-end
 
 // convolution_buf
 always@(posedge clk or negedge rst_n) begin
@@ -483,24 +524,24 @@ always@(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		for(i = 0; i < 6; i = i + 1) begin
 			for(j= 0 ; j <6; j = j + 1) begin
-				for(counter = 0; counter < 3; counter = counter + 1) begin
-					conimg_buf[i][j][counter] <= 8'b0;
+				for(k = 0; k < 3; k = k + 1) begin
+					conimg_buf[i][j][k] <= 8'b0;
 				end
 			end
 		end
 	end else if(c_state == S_CONV) begin
-		if(counter == 3)
-			conimg_buf[row][column][0] <= result_6 >> 10;
-		else if(counter ==106)
-			conimg_buf[5][5][0] <= result_6 >> 10;
-		else if(counter ==107)
-			conimg_buf[5][5][1] <= result_6 >> 10;
-		else if(counter ==108)
-			conimg_buf[5][5][2] <= result_6 >> 10;
-		else case(inner_cont)
-			0:conimg_buf[row][column][0]        <= result_6 >> 10;
-			1:conimg_buf[row-1][column-1][1]  <= result_6 >> 10;
-			2:conimg_buf[row-1][column-1][2]  <= result_6 >> 10;
+		case(counter)
+			3:			conimg_buf[row][column][0] <= result_6 >> 10;
+			106:		conimg_buf[5][5][0] <= result_6 >> 10;
+			107:		conimg_buf[5][5][1] <= result_6 >> 10;
+			108:		conimg_buf[5][5][2] <= result_6 >> 10;
+			default: begin
+			case(inner_cont)
+				0:conimg_buf[row][column][0]        <= result_6 >> 10;
+				1:conimg_buf[row-1][column-1][1]  <= result_6 >> 10;
+				2:conimg_buf[row-1][column-1][2]  <= result_6 >> 10;
+			endcase
+			end
 		endcase
 	end
 end
@@ -514,19 +555,20 @@ always@(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		for(i = 0; i < 6; i = i + 1)
 			stage_1_buf[i] <= 8'b0;
-	end else if(c_state == S_CONV) begin
-		if(row[0] && column[0]) begin
-			for(j = 0; j < 3; j = j + 1) begin
-				if(conimg_buf[row -1][column-1][j] > conimg_buf[row -1][column][j])
-					stage_1_buf[0 + j*2]  <= conimg_buf[row -1][column-1][j];
-				else
-					stage_1_buf[0 + j*2]  <= conimg_buf[row -1][column][j];
-				if(conimg_buf[row][column-1][j] > conimg_buf[row][column][j])
-					stage_1_buf[1 + j*2] <= conimg_buf[row][column-1][j];
-				else
-					stage_1_buf[1 + j*2] <= conimg_buf[row][column][j];
-			end
+	end else if(c_state == S_POOL) begin
+		for(j = 0; j < 3; j = j + 1) begin
+			if(conimg_buf[row -1][column-1][j] > conimg_buf[row -1][column][j])
+				stage_1_buf[0 + j*2]  <= conimg_buf[row -1][column-1][j];
+			else
+				stage_1_buf[0 + j*2]  <= conimg_buf[row -1][column][j];
+			if(conimg_buf[row][column-1][j] > conimg_buf[row][column][j])
+				stage_1_buf[1 + j*2] <= conimg_buf[row][column-1][j];
+			else
+				stage_1_buf[1 + j*2] <= conimg_buf[row][column][j];
 		end
+	end else begin
+		for(i = 0; i < 6; i = i + 1)
+			stage_1_buf[i] <= stage_1_buf[i];
 	end
 end
 // stage_2_buf
@@ -534,7 +576,7 @@ always@(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		for(i = 0; i < 3; i = i + 1)
 			stage_2_buf[i] <= 8'b0;
-	end else if(c_state == S_CONV) begin
+	end else if(c_state == S_POOL) begin
 		// filter 1
 		if(stage_1_buf[0] > stage_1_buf[1])
 			stage_2_buf[0]  <= stage_1_buf[0];
@@ -552,44 +594,21 @@ always@(posedge clk or negedge rst_n) begin
 			stage_2_buf[2]  <= stage_1_buf[5];
 	end
 end
-// stage_3_buf
-always@(posedge clk or negedge rst_n) begin
-	if(!rst_n) begin
-		stage_3_buf[0] <= 8'b0;
-		stage_3_buf[1] <= 8'b0;
-	end else if(c_state == S_CONV) begin
-		stage_3_buf[0] <= stage_2_buf[1];
-		stage_3_buf[1] <= stage_2_buf[2];
-	end
-end
-// stage_4_buf
-always@(posedge clk or negedge rst_n) begin
-	if(!rst_n)
-		stage_4_buf <= 8'b0;
-	else if(c_state == S_CONV)
-		stage_4_buf <= stage_3_buf[1];
-end
 // pooling_buf
 always@(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		for(i = 0; i < 27; i = i + 1)
 			pooling_buf[i] <= 8'b0;
-		pool_cnt <= 8'b0;
-	end else if(c_state == S_CONV) begin
-		if(counter > 24) begin
-			case(inner_cont)
-				0: begin
-					pooling_buf[18 + pool_cnt] <= stage_4_buf;
-					pool_cnt <= pool_cnt + 1;
-				end
-				1: pooling_buf[0 + pool_cnt] <= stage_2_buf[0];
-				2: pooling_buf[9 + pool_cnt] <= stage_3_buf[0];
-			endcase
-		end
+		pool_cnt <= 4'b0;
+	end else if(c_state == S_POOL && counter > 2) begin
+		pooling_buf[0 + pool_cnt]   <= stage_2_buf[0];
+		pooling_buf[9 + pool_cnt]   <= stage_2_buf[1];
+		pooling_buf[18+pool_cnt]   <= stage_2_buf[2];
+		pool_cnt <= pool_cnt + 1;
 	end else begin
 		for(i = 0; i < 27; i = i + 1)
 			pooling_buf[i] <= pooling_buf[i];
-		pool_cnt <= pool_cnt;
+		pool_cnt <= 4'b0;
 	end
 end
 
