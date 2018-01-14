@@ -58,12 +58,12 @@ reg	[1:0] 	number;
 // Synopsys DesignWare Tool
 wire				CO[2:0];
 wire [15:0] 	RESULT_1, RESULT_2, RESULT_3;
-wire	[16:0]	 RESULT_4, RESULT_5;
-wire	[17:0]	RESULT_6;
+wire	[15:0]	 RESULT_4, RESULT_5;
+wire	[16:0]	RESULT_6;
 reg 	[7:0]	m_1, m_2, m_3, weight_1, weight_2, weight_3;
-reg	[15:0] 	result_1, result_2, result_3,adder[5:0];
-reg	[16:0]	result_4, result_5;
-reg	[17:0]	result_6;
+reg	[15:0] 	result_1, result_2, result_3;
+reg	[15:0]	result_4, result_5, a_1, a_2, a_3, a_4;
+reg	[16:0]	result_6, a_5, a_6;
 reg				ci[2:0], co[2:0];
 reg 	[1:0]	inner_cont;
 reg 	[9:0]  	convolution_buf[8:0];
@@ -81,9 +81,9 @@ reg	[7:0]	stage_4_buf, pool_cnt;
 DW02_mult #(8,8) M_1(.A(m_1), .B(weight_1),.TC(1'b1), .PRODUCT(RESULT_1));
 DW02_mult #(8,8) M_2(.A(m_2),.B(weight_2),.TC(1'b1), .PRODUCT(RESULT_2));
 DW02_mult #(8,8) M_3(.A(m_3),.B(weight_3),.TC(1'b1), .PRODUCT(RESULT_3));
-DW01_add #(16) A_1(.A(adder[0]),.B(adder[1]),.CI(ci[0]),.SUM(RESULT_4),.CO(CO[0]));
-DW01_add #(16) A_2(.A(adder[2]),.B(adder[3]),.CI(ci[1]),.SUM(RESULT_5),.CO(CO[1]));
-DW01_add #(17) A_3(.A(adder[4]),.B(adder[5]),.CI(ci[2]),.SUM(RESULT_6),.CO(CO[2]));
+DW01_add #(16) A_1(.A(a_1),.B(a_2),.CI(ci[0]),.SUM(RESULT_4),.CO(CO[0]));
+DW01_add #(16) A_2(.A(a_3),.B(a_4),.CI(ci[1]),.SUM(RESULT_5),.CO(CO[1]));
+DW01_add #(17) A_3(.A(a_5),.B(a_6),.CI(ci[2]),.SUM(RESULT_6),.CO(CO[2]));
 
 // carry out buffer
 always@(*) begin
@@ -98,7 +98,7 @@ always@(*) begin
 	result_3 = RESULT_3;
 	result_4 = RESULT_4;
 	result_5 = RESULT_5;
-	result_6 = RESULT_6;
+	result_6 = RESULT_6; // need to modify
 end
 //---------------------------------------------------------------------
 // PIPELINE MULTI AND ADD
@@ -177,25 +177,33 @@ end
 // a_1 a_2 a_3 a_4 a_5 a_6 buffer
 always@(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
-		for(i = 0; i < 6; i = i + 1)
-			adder[i] <= 16'b0;
+		a_1 <= 16'b0;
+		a_2 <= 16'b0;
+		a_3 <= 16'b0;
+		a_4 <= 16'b0;
+		a_5 <= 17'b0;
+		a_6 <= 17'b0;
 	end else case(c_state)
 		S_CONV: begin
-			adder[0] <= result_1;
-			adder[1] <= result_2;
-			adder[2] <= result_3;
+			a_1 <= result_1;
+			a_2 <= result_2;
+			a_3 <= result_3;
 			case(inner_cont)
-				2:	adder[3] <= weight_buf[9];
-				0:	adder[3] <= weight_buf[10];
-				1: adder[3] <= weight_buf[11];
-				default: adder[3] <= adder[3];
+				2:	a_4 <= weight_buf[9];
+				0:	a_4 <= weight_buf[10];
+				1: a_4 <= weight_buf[11];
+				default:a_4 <= a_4;
 			endcase
-			adder[4] <= {{ 1{co[0]}} ,result_4[16:0]};
-			adder[5] <= {{ 1{co[1]}} ,result_5[16:0]};
+			a_5<= {{ 1{co[0]}} ,result_4[16:0]};
+			a_6 <= {{ 1{co[1]}} ,result_5[16:0]};
 		end
 		default: begin
-			for(i = 0; i < 6; i = i + 1)
-				adder[i] <= adder[i];
+			a_1 <= a_1;
+			a_2 <= a_2;
+			a_3 <= a_3;
+			a_4 <= a_4;
+			a_5 <= a_5;
+			a_6 <= a_6;
 		end
 	endcase
 end
@@ -385,7 +393,7 @@ always@(posedge clk or negedge rst_n) begin
 		done <= 0;
 	else case(c_state)
 		S_CONV:
-			if(counter ==109)
+			if(counter ==106)
 				done <= 1;
 			else
 				done <= done;
@@ -494,6 +502,94 @@ always@(posedge clk or negedge rst_n) begin
 			1:conimg_buf[row-1][column-1][1]  <= result_6 >> 10;
 			2:conimg_buf[row-1][column-1][2]  <= result_6 >> 10;
 		endcase
+	end
+end
+
+//---------------------------------------------------------------------
+//  Pooling Layer
+//---------------------------------------------------------------------
+
+// stage_1_buf
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		for(i = 0; i < 6; i = i + 1)
+			stage_1_buf[i] <= 8'b0;
+	end else if(c_state == S_CONV) begin
+		if(row[0] && column[0]) begin
+			for(j = 0; j < 3; j = j + 1) begin
+				if(conimg_buf[row -1][column-1][j] > conimg_buf[row -1][column][j])
+					stage_1_buf[0 + j*2]  <= conimg_buf[row -1][column-1][j];
+				else
+					stage_1_buf[0 + j*2]  <= conimg_buf[row -1][column][j];
+				if(conimg_buf[row][column-1][j] > conimg_buf[row][column][j])
+					stage_1_buf[1 + j*2] <= conimg_buf[row][column-1][j];
+				else
+					stage_1_buf[1 + j*2] <= conimg_buf[row][column][j];
+			end
+		end
+	end
+end
+// stage_2_buf
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		for(i = 0; i < 3; i = i + 1)
+			stage_2_buf[i] <= 8'b0;
+	end else if(c_state == S_CONV) begin
+		// filter 1
+		if(stage_1_buf[0] > stage_1_buf[1])
+			stage_2_buf[0]  <= stage_1_buf[0];
+		else
+			stage_2_buf[0]  <= stage_1_buf[1];
+		// filter 2
+		if(stage_1_buf[2] > stage_1_buf[3])
+			stage_2_buf[1]  <= stage_1_buf[2];
+		else
+			stage_2_buf[1]  <= stage_1_buf[3];
+		// filter 3
+		if(stage_1_buf[4] > stage_1_buf[5])
+			stage_2_buf[2]  <= stage_1_buf[4];
+		else
+			stage_2_buf[2]  <= stage_1_buf[5];
+	end
+end
+// stage_3_buf
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		stage_3_buf[0] <= 8'b0;
+		stage_3_buf[1] <= 8'b0;
+	end else if(c_state == S_CONV) begin
+		stage_3_buf[0] <= stage_2_buf[1];
+		stage_3_buf[1] <= stage_2_buf[2];
+	end
+end
+// stage_4_buf
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n)
+		stage_4_buf <= 8'b0;
+	else if(c_state == S_CONV)
+		stage_4_buf <= stage_3_buf[1];
+end
+// pooling_buf
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		for(i = 0; i < 27; i = i + 1)
+			pooling_buf[i] <= 8'b0;
+		pool_cnt <= 8'b0;
+	end else if(c_state == S_CONV) begin
+		if(counter > 24) begin
+			case(inner_cont)
+				0: begin
+					pooling_buf[18 + pool_cnt] <= stage_4_buf;
+					pool_cnt <= pool_cnt + 1;
+				end
+				1: pooling_buf[0 + pool_cnt] <= stage_2_buf[0];
+				2: pooling_buf[9 + pool_cnt] <= stage_3_buf[0];
+			endcase
+		end
+	end else begin
+		for(i = 0; i < 27; i = i + 1)
+			pooling_buf[i] <= pooling_buf[i];
+		pool_cnt <= pool_cnt;
 	end
 end
 
