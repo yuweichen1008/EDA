@@ -72,9 +72,9 @@ reg 	[16:0]   conimg_buf[5:0][5:0][2:0];
 reg	[7:0]	pooling_buf[26:0];
 reg	[7:0]	stage_1_buf[5:0];
 reg	[7:0]	stage_2_buf[2:0];
-reg	[7:0]	stage_3_buf[1:0];
 reg	[3:0]	pool_cnt;
-
+// fully connected layer
+reg	[7:0] 	fc_buf[2:0], outcome[2:0];
 //---------------------------------------------------------------------
 //   Synopsys DesignWare                      
 //---------------------------------------------------------------------
@@ -129,6 +129,30 @@ always@(posedge clk or negedge rst_n) begin
 				end
 			endcase
 		end
+		S_AFF_2: begin
+			case(counter)
+				11, 25, 39, 55: begin
+					weight_1 <= weight_buf[0][7:0];
+					weight_2 <= weight_buf[1][7:0];
+					weight_3 <= weight_buf[2][7:0];
+				end
+				12, 26, 40, 56: begin
+					weight_1 <= weight_buf[3][7:0];
+					weight_2 <= weight_buf[4][7:0];
+					weight_3 <= weight_buf[5][7:0];
+				end
+				13, 27, 41, 57: begin
+					weight_1 <= weight_buf[6][7:0];
+					weight_2 <= weight_buf[7][7:0];
+					weight_3 <= weight_buf[8][7:0];
+				end
+				default: begin
+					weight_1 <= weight_1;
+					weight_2 <= weight_2;
+					weight_3 <= weight_3;
+				end
+			endcase
+		end
 		default: begin
 			weight_1 <= weight_1;
 			weight_2 <= weight_2;
@@ -167,6 +191,35 @@ always@(posedge clk or negedge rst_n) begin
 				end
 			endcase
 		end
+		S_AFF_2: begin
+			case(counter)
+				11, 25, 39: begin
+					m_1 <= pooling_buf[0][7:0];
+					m_2 <= pooling_buf[10][7:0];
+					m_3 <= pooling_buf[20][7:0];
+				end
+				12, 26, 40: begin
+					m_1 <= pooling_buf[21][7:0];
+					m_2 <= pooling_buf[13][7:0];
+					m_3 <= pooling_buf[5][7:0];
+				end
+				13, 27, 41: begin
+					m_1 <= pooling_buf[6][7:0];
+					m_2 <= pooling_buf[16][7:0];
+					m_3 <= pooling_buf[26][7:0];
+				end
+				55, 56, 57: begin
+					m_1 <= fc_buf[0];
+					m_2 <= fc_buf[1];
+					m_3 <= fc_buf[2];
+				end
+				default: begin
+					m_1 <= m_1;
+					m_2 <= m_2;
+					m_3 <= m_3;
+				end
+			endcase
+		end
 		default: begin
 			m_1 <= m_1;
 			m_2 <= m_2;
@@ -194,6 +247,15 @@ always@(posedge clk or negedge rst_n) begin
 				1: a_4 <= weight_buf[11];
 				default:a_4 <= a_4;
 			endcase
+			a_5<= {co[0] ,result_4};
+			a_6 <= {co[1] ,result_5};
+		end
+		S_AFF_2: begin
+			a_1 <= result_1;
+			a_2 <= result_2;
+			a_3 <= result_3;
+			// not finish here
+			a_4 <= stage_1_buf[1] << 8;
 			a_5<= {co[0] ,result_4};
 			a_6 <= {co[1] ,result_5};
 		end
@@ -310,6 +372,21 @@ always@(posedge clk or negedge rst_n) begin
 				end
 			endcase
 		end
+		S_AFF_2: begin
+			case(counter)
+			 0, 1, 2, 3, 4, 5, 6, 7, 8: A <= counter + 30;
+			 //9:  A <= 113;
+			 14, 15, 16, 17, 18, 19, 20, 21, 22: A <= counter + 25;
+			 //23:  A <= 114;
+			 28, 29, 30, 31, 32, 33, 34, 35, 36: A <= counter + 20;
+			 //37:  A <= 115;
+			 44, 45, 46, 47, 48, 49, 50, 51, 52, 53: A <= counter + 70;
+			default: begin
+				for(i = 0; i < 12; i= i + 1)
+					weight_buf[i] <= weight_buf[i];
+			end
+		endcase
+		end
 		default: begin
 			A <= 0;
 			WEN <= 1;
@@ -336,6 +413,23 @@ always@(posedge clk or negedge rst_n) begin
 			27: weight_buf[9] <= Q_cs;
 			28: weight_buf[10] <= Q_cs;
 			29: weight_buf[11] <= Q_cs;
+			default: begin
+				for(i = 0; i < 12; i= i + 1)
+					weight_buf[i] <= weight_buf[i];
+			end
+		endcase
+	end else if(c_state == S_AFF_2) begin
+		case(counter)
+			 3  , 17, 31, 47: weight_buf[0] <= Q_cs[14:8];
+			 4  , 18, 32, 48: weight_buf[1] <= Q_cs[14:8];
+			 5  , 19, 33, 49: weight_buf[2] <= Q_cs[14:8];
+			 6  , 20, 34, 50: weight_buf[3] <= Q_cs[14:8];
+			 7  , 21, 35, 51: weight_buf[4] <= Q_cs[14:8];
+			 8  , 22, 36, 52: weight_buf[5] <= Q_cs[14:8];
+			 9  , 23, 37, 53: weight_buf[6] <= Q_cs[14:8];
+			 10, 24, 38, 54: weight_buf[7] <= Q_cs[14:8];
+			 11, 25, 39, 55: weight_buf[8] <= Q_cs[14:8];
+			 12, 26, 40, 56: weight_buf[9] <= Q_cs[14:8];
 			default: begin
 				for(i = 0; i < 12; i= i + 1)
 					weight_buf[i] <= weight_buf[i];
@@ -430,6 +524,10 @@ always@(posedge clk or negedge rst_n) begin
 		end
 		S_AFF_1, S_OUTPUT:
 			done <= 0;
+		S_AFF_2: begin
+			if(counter == 61) done <= 1;
+			else done <= done;
+		end
 		default:
 			done <= done;
 	endcase
@@ -574,6 +672,13 @@ always@(posedge clk or negedge rst_n) begin
 			else
 				stage_1_buf[1 + j*2] <= conimg_buf[row][column][j];
 		end
+	end else if(c_state == S_AFF_2) begin
+		stage_1_buf[0] <= result_4 >> 8;
+		stage_1_buf[1] <= result_3 >> 8;
+		stage_1_buf[2] <= result_6 >> 9;
+		stage_1_buf[3] <= stage_1_buf[0] + stage_1_buf[2];
+		stage_1_buf[4] <= result_3 >> 8 + stage_1_buf[1];
+		stage_1_buf[5] <= stage_1_buf[5];
 	end else begin
 		for(i = 0; i < 6; i = i + 1)
 			stage_1_buf[i] <= stage_1_buf[i];
@@ -600,6 +705,18 @@ always@(posedge clk or negedge rst_n) begin
 			stage_2_buf[2]  <= stage_1_buf[4];
 		else
 			stage_2_buf[2]  <= stage_1_buf[5];
+	end else if(c_state == S_AFF_2) begin
+		if(outcome[0] > outcome[1])
+			stage_2_buf[0] <= 0;
+		else
+			stage_2_buf[0] <= 1;
+		if(outcome[0] > outcome[2])
+			stage_2_buf[1] <= 0;
+		else
+			stage_2_buf[1] <= 2;
+	end else begin
+		for(i = 0; i < 3; i = i + 1)
+			stage_2_buf[i] <= stage_2_buf[i] ;
 	end
 end
 // pooling_buf		// this is mostly 0 ?
@@ -620,6 +737,85 @@ always@(posedge clk or negedge rst_n) begin
 	end
 end
 
+//---------------------------------------------------------------------
+//  Fully Connected Layer
+//---------------------------------------------------------------------
+
+// fc_buf
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		fc_buf[0] <= 8'b0;
+		fc_buf[1] <= 8'b0;
+		fc_buf[2] <= 8'b0;
+	end else if(c_state == S_AFF_2) begin
+		case(counter)
+			15: fc_buf[0] <= stage_1_buf[3];
+			29: fc_buf[1] <= stage_1_buf[3];
+			43: fc_buf[2] <= stage_1_buf[3];
+			default: begin
+				fc_buf[0] <= fc_buf[0];
+				fc_buf[1] <= fc_buf[1];
+				fc_buf[2] <= fc_buf[2];
+			end
+		endcase
+	end else begin
+		fc_buf[0] <= fc_buf[0];
+		fc_buf[1] <= fc_buf[1];
+		fc_buf[2] <= fc_buf[2];
+	end
+end
+// outcome
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n) begin
+		outcome[0] <= 8'b0;
+		outcome[1] <= 8'b0;
+		outcome[2] <= 8'b0;
+	end else if(c_state == S_AFF_2) begin
+		case(counter)
+			57: outcome[0] <= stage_1_buf[4];
+			58: outcome[1] <= stage_1_buf[4];
+			59: outcome[2] <= stage_1_buf[4];
+			default: begin
+				outcome[0] <= outcome[0];
+				outcome[1] <= outcome[1];
+				outcome[2] <= outcome[2];
+			end
+		endcase
+	end else begin
+		outcome[0] <= outcome[0];
+		outcome[1] <= outcome[1];
+		outcome[2] <= outcome[2];
+	end
+end
+
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n)
+		number <= 2'b00;
+	else if(c_state == S_AFF_2) begin
+		case(stage_2_buf[1])
+			0: begin
+				if(outcome[0] > outcome[1])
+					number <= 2'b00;
+				else
+					number <= 2'b01;
+			end
+			2: begin
+				if(outcome[2] > outcome[1])
+					number <= 2'b10;
+				else
+					number <= 2'b01;
+			end
+			default:
+				number <= number;
+		endcase
+	end else begin
+		number <= number;
+	end
+end
+//---------------------------------------------------------------------
+//  Output Section
+//---------------------------------------------------------------------
+
 //   Output part                                      
 always@(posedge clk or negedge rst_n) begin
     if(!rst_n)
@@ -637,7 +833,7 @@ always@(posedge clk or negedge rst_n)   begin
         number_4 <= 1'b0;
         number_6 <= 1'b0;
     end else if(c_state == S_OUTPUT)    begin
-        case(2)
+        case(number)
             0: number_2 <= 1'b1;
             1: number_4 <= 1'b1;
             2: number_6 <= 1'b1;
@@ -654,11 +850,6 @@ always@(posedge clk or negedge rst_n)   begin
         number_6 <= 1'b0;
     end
 end
-
-//---------------------------------------------------------------------
-//  Fully Connected Layer
-//---------------------------------------------------------------------
-
 
 //synopsys dc_script_begin
 //set_implementation pparch M_1
