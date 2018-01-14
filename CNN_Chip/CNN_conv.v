@@ -53,7 +53,7 @@ reg 	[2:0]    c_state, n_state;
 reg 	[14:0]  image_buf[7:0][7:0];
 reg 	[3:0]   	column, row;
 reg	[15:0] 	weight_buf[11:0];
-reg				done;
+reg				done, flag_FC;
 reg	[1:0] 	number;
 // Synopsys DesignWare Tool
 wire				CO[2:0];
@@ -64,7 +64,7 @@ reg 	[7:0]	m_1, m_2, m_3, weight_1, weight_2, weight_3;
 reg	[15:0] 	result_1, result_2, result_3;
 reg	[15:0]	result_4, result_5, a_1, a_2, a_3, a_4;
 reg	[16:0]	result_6, a_5, a_6;
-reg				ci[2:0], co[2:0];
+reg				co[2:0];
 reg 	[1:0]	inner_cont;
 reg 	[9:0]  	convolution_buf[8:0];
 reg 	[16:0]   conimg_buf[5:0][5:0][2:0];
@@ -81,9 +81,9 @@ reg	[3:0]	pool_cnt;
 DW02_mult #(8,8) M_1(.A(m_1), .B(weight_1),.TC(1'b1), .PRODUCT(RESULT_1));
 DW02_mult #(8,8) M_2(.A(m_2),.B(weight_2),.TC(1'b1), .PRODUCT(RESULT_2));
 DW02_mult #(8,8) M_3(.A(m_3),.B(weight_3),.TC(1'b1), .PRODUCT(RESULT_3));
-DW01_add #(16) A_1(.A(a_1),.B(a_2),.CI(ci[0]),.SUM(RESULT_4),.CO(CO[0]));
-DW01_add #(16) A_2(.A(a_3),.B(a_4),.CI(ci[1]),.SUM(RESULT_5),.CO(CO[1]));
-DW01_add #(17) A_3(.A(a_5),.B(a_6),.CI(ci[2]),.SUM(RESULT_6),.CO(CO[2]));
+DW01_add #(16) A_1(.A(a_1),.B(a_2),.CI(1'b0),.SUM(RESULT_4),.CO(CO[0]));
+DW01_add #(16) A_2(.A(a_3),.B(a_4),.CI(1'b0),.SUM(RESULT_5),.CO(CO[1]));
+DW01_add #(17) A_3(.A(a_5),.B(a_6),.CI(1'b0),.SUM(RESULT_6),.CO(CO[2]));
 
 // carry out buffer
 always@(*) begin
@@ -194,8 +194,8 @@ always@(posedge clk or negedge rst_n) begin
 				1: a_4 <= weight_buf[11];
 				default:a_4 <= a_4;
 			endcase
-			a_5<= {{ 1{co[0]}} ,result_4[15:0]};
-			a_6 <= {{ 1{co[1]}} ,result_5[15:0]};
+			a_5<= {co[0] ,result_4};
+			a_6 <= {co[1] ,result_5};
 		end
 		default: begin
 			a_1 <= a_1;
@@ -257,11 +257,14 @@ always@(*) begin
                 n_state = S_AFF_1;
         end
 		S_AFF_1: begin
-			n_state = S_POOL;
+			if(flag_FC)
+				n_state = S_AFF_2;
+			else
+				n_state = S_POOL;
 		end
 		S_POOL: begin
 			if(done)
-				n_state = S_OUTPUT;
+				n_state = S_AFF_1;
 		end
 		S_AFF_2: begin
 			if(done)
@@ -379,12 +382,10 @@ always@(posedge clk or negedge rst_n)   begin
     else if(in_valid_1 || in_valid_2)
         counter <= counter + 1;
     else case(c_state)
-		S_CONV:
+		S_CONV, S_POOL, S_AFF_2:
 			counter <= counter + 1;
 		S_AFF_1:
 			counter <= 7'b0;
-		S_POOL:
-			counter <= counter + 1;
 		S_OUTPUT, S_IDLE:
 			counter <= 7'b0;
 		default:
@@ -434,6 +435,13 @@ always@(posedge clk or negedge rst_n) begin
 	endcase
 end
 
+//--------------- Flag FC
+always@(posedge clk or negedge rst_n) begin
+	if(!rst_n)
+		flag_FC <= 1'b0;
+	else if(c_state == S_AFF_1)
+		flag_FC <= ~flag_FC;	//0 -> 1 1->0
+end
 
 // column
 always@(posedge clk or negedge rst_n) begin
@@ -532,14 +540,14 @@ always@(posedge clk or negedge rst_n) begin
 	end else if(c_state == S_CONV) begin
 		case(counter)
 			3:			conimg_buf[row][column][0] <= result_6 >> 10;
-			106:		conimg_buf[5][5][0] <= result_6 >> 10;
-			107:		conimg_buf[5][5][1] <= result_6 >> 10;
-			108:		conimg_buf[5][5][2] <= result_6 >> 10;
+			106:		conimg_buf[5][5][0] <= {{co[2]},result_6} >> 10;
+			107:		conimg_buf[5][5][1] <= {{co[2]},result_6} >> 10;
+			108:		conimg_buf[5][5][2] <= {{co[2]},result_6} >> 10;
 			default: begin
 			case(inner_cont)
-				0:conimg_buf[row][column][0]        <= result_6 >> 10;
-				1:conimg_buf[row-1][column-1][1]  <= result_6 >> 10;
-				2:conimg_buf[row-1][column-1][2]  <= result_6 >> 10;
+				0:conimg_buf[row][column][0]        <= {{co[2]},result_6} >> 10;
+				1:conimg_buf[row-1][column-1][1]  <= {{co[2]},result_6} >> 10;
+				2:conimg_buf[row-1][column-1][2]  <= {{co[2]},result_6} >> 10;
 			endcase
 			end
 		endcase
@@ -594,7 +602,7 @@ always@(posedge clk or negedge rst_n) begin
 			stage_2_buf[2]  <= stage_1_buf[5];
 	end
 end
-// pooling_buf
+// pooling_buf		// this is mostly 0 ?
 always@(posedge clk or negedge rst_n) begin
 	if(!rst_n) begin
 		for(i = 0; i < 27; i = i + 1)
@@ -646,6 +654,11 @@ always@(posedge clk or negedge rst_n)   begin
         number_6 <= 1'b0;
     end
 end
+
+//---------------------------------------------------------------------
+//  Fully Connected Layer
+//---------------------------------------------------------------------
+
 
 //synopsys dc_script_begin
 //set_implementation pparch M_1
